@@ -18,12 +18,13 @@ DWORD WINAPI worker_thread(LPVOID parameter) noexcept
     const HMODULE module = *static_cast<const HMODULE*>(parameter);
 
     DWORD exit_code = g_worker_handle_close_error;
+    bool can_unload = true;
     if (exit_code != ERROR_SUCCESS) {
         izanagi::report_error("CloseHandle(worker thread)", exit_code);
     }
 
     {
-        izanagi::runtime runtime; // noexcept construction; owns all runtime resources
+        izanagi::runtime runtime;
         DWORD runtime_error = ERROR_SUCCESS;
 
         try {
@@ -37,14 +38,19 @@ DWORD WINAPI worker_thread(LPVOID parameter) noexcept
         }
 
         const DWORD shutdown_error = runtime.Shutdown();
+        can_unload = runtime.CanUnload();
         exit_code = preserve_first_error(exit_code, runtime_error);
         exit_code = preserve_first_error(exit_code, shutdown_error);
+    }
+
+    if (!can_unload) {
+        return exit_code;
     }
 
     FreeLibraryAndExitThread(module, exit_code);
 }
 
-} // namespace
+}
 
 extern "C" BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
 {

@@ -31,6 +31,9 @@ public:
     DWORD Initialize();
     void Run();
     DWORD Shutdown() noexcept;
+    [[nodiscard]] bool CanUnload() const noexcept { return can_unload_; }
+
+    static void RequestShutdown() noexcept;
 
 private:
     enum class lifecycle : unsigned char {
@@ -41,6 +44,8 @@ private:
 
     debug_console console_{};
     lifecycle state_{lifecycle::cold};
+    bool hook_attempted_ = false;
+    bool can_unload_ = true;
 };
 
-} // namespace izanagi
+}

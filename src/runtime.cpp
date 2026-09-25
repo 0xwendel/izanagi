@@ -1,7 +1,9 @@
 #include "runtime.hpp"
 
 #include "diagnostics.hpp"
+#include "dx11_hook.hpp"
 
+#include <atomic>
 #include <iostream>
 
 namespace izanagi {
@@ -9,17 +11,23 @@ namespace izanagi {
 namespace {
 
 constexpr DWORD k_stream_error = ERROR_WRITE_FAULT;
+constinit std::atomic<bool> g_shutdown_requested{false};
 
 DWORD preserve_first_error(DWORD current, DWORD candidate) noexcept
 {
     return current == ERROR_SUCCESS ? candidate : current;
 }
 
-} // namespace
+}
 
 runtime::~runtime() noexcept
 {
     (void)Shutdown();
+}
+
+void runtime::RequestShutdown() noexcept
+{
+    g_shutdown_requested.store(true, std::memory_order_release);
 }
 
 DWORD runtime::Initialize()
@@ -27,6 +35,8 @@ DWORD runtime::Initialize()
     if (state_ != lifecycle::cold) {
         return ERROR_ALREADY_INITIALIZED;
     }
+
+    g_shutdown_requested.store(false, std::memory_order_release);
 
     const DWORD console_error = console_.Initialize();
     if (console_error != ERROR_SUCCESS) {
@@ -38,6 +48,12 @@ DWORD runtime::Initialize()
     if (!std::cout.good()) {
         report_error("runtime initialization output", k_stream_error);
         return k_stream_error;
+    }
+
+    hook_attempted_ = true;
+    if (!dx11_hook::Initialize()) {
+        report_error("dx11_hook::Initialize", ERROR_GEN_FAILURE);
+        return ERROR_GEN_FAILURE;
     }
 
     state_ = lifecycle::active;
@@ -53,14 +69,16 @@ void runtime::Run()
 
     bool end_was_down = (GetAsyncKeyState(VK_END) & 0x8000) != 0;
 
-    for (;;) {
+    while (!g_shutdown_requested.load(std::memory_order_acquire)) {
         const bool end_is_down = (GetAsyncKeyState(VK_END) & 0x8000) != 0;
         if (end_is_down && !end_was_down) {
-            break;
+            RequestShutdown();
         }
 
         end_was_down = end_is_down;
-        Sleep(100);
+        if (!g_shutdown_requested.load(std::memory_order_acquire)) {
+            Sleep(100);
+        }
     }
 }
 
@@ -86,6 +104,15 @@ DWORD runtime::Shutdown() noexcept
         }
     }
 
+    if (hook_attempted_) {
+        if (!dx11_hook::Shutdown()) {
+            can_unload_ = false;
+            first_error = preserve_first_error(first_error, ERROR_BUSY);
+            report_error("dx11_hook::Shutdown: module pinned", ERROR_BUSY);
+        }
+        hook_attempted_ = false;
+    }
+
     const DWORD console_error = console_.Shutdown();
     state_ = lifecycle::stopped;
 
@@ -97,4 +124,4 @@ DWORD runtime::Shutdown() noexcept
     return first_error;
 }
 
-} // namespace izanagi
+}

@@ -24,7 +24,7 @@ void close_stream(FILE*& stream, const char* operation, DWORD& first) noexcept {
     if (stream == nullptr) {
         return;
     }
-    // fclose invalidates the stream even if flushing/closing reports an error.
+    // fclose invalida o stream mesmo quando retorna erro.
     FILE* const owned = std::exchange(stream, nullptr);
     if (std::fclose(owned) == EOF) {
         const int error = errno;
@@ -48,7 +48,7 @@ void detach_stream(std::basic_ios<Char>& stream) noexcept {
     stream.rdbuf(nullptr);
 }
 
-} // namespace
+}
 
 debug_console::~debug_console() noexcept {
     (void)Shutdown();
@@ -148,4 +148,4 @@ DWORD debug_console::Shutdown() noexcept {
     return first;
 }
 
-} // namespace izanagi
+}

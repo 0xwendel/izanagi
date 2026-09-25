@@ -12,4 +12,4 @@ inline void report_error(const char* operation, unsigned long code) noexcept {
     OutputDebugStringA(message);
 }
 
-} // namespace izanagi
+}

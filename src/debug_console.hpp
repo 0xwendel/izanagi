@@ -27,4 +27,4 @@ private:
     bool streams_touched_ = false;
 };
 
-} // namespace izanagi
+}
