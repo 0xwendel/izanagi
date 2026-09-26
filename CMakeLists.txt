@@ -48,6 +48,9 @@ add_library(izanagi SHARED
     src/debug_console.cpp
     src/dllmain.cpp
     src/runtime.cpp
+    src/runtime_services.cpp
+    src/module_registry.cpp
+    src/pe_image.cpp
     src/dx11_hook.cpp
     src/gui.cpp
     third_party/imgui/imgui.cpp
@@ -100,6 +103,7 @@ target_link_libraries(izanagi PRIVATE
     kernel32
     gdi32
     dwmapi
+    psapi
 )
 
 set_target_properties(izanagi PROPERTIES

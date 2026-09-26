@@ -2,8 +2,10 @@
 
 #include "diagnostics.hpp"
 #include "dx11_hook.hpp"
+#include "runtime_services.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <iostream>
 
 namespace izanagi {
@@ -50,6 +52,10 @@ DWORD runtime::Initialize()
         return k_stream_error;
     }
 
+    if (!runtime_services::Initialize()) {
+        report_error("runtime_services::Initialize", ERROR_GEN_FAILURE);
+        return ERROR_GEN_FAILURE;
+    }
     hook_attempted_ = true;
     if (!dx11_hook::Initialize()) {
         report_error("dx11_hook::Initialize", ERROR_GEN_FAILURE);
@@ -69,7 +75,13 @@ void runtime::Run()
 
     bool end_was_down = (GetAsyncKeyState(VK_END) & 0x8000) != 0;
 
+    auto next_refresh = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!g_shutdown_requested.load(std::memory_order_acquire)) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= next_refresh) {
+            runtime_services::RefreshModules();
+            next_refresh = now + std::chrono::seconds(5);
+        }
         const bool end_is_down = (GetAsyncKeyState(VK_END) & 0x8000) != 0;
         if (end_is_down && !end_was_down) {
             RequestShutdown();
@@ -104,13 +116,19 @@ DWORD runtime::Shutdown() noexcept
         }
     }
 
+    runtime_services::BeginShutdown();
+    bool hooks_drained = true;
     if (hook_attempted_) {
         if (!dx11_hook::Shutdown()) {
+            hooks_drained = false;
             can_unload_ = false;
             first_error = preserve_first_error(first_error, ERROR_BUSY);
             report_error("dx11_hook::Shutdown: module pinned", ERROR_BUSY);
         }
         hook_attempted_ = false;
+    }
+    if (hooks_drained) {
+        runtime_services::Shutdown();
     }
 
     const DWORD console_error = console_.Shutdown();

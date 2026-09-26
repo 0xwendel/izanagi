@@ -2,6 +2,7 @@
 
 #include "diagnostics.hpp"
 #include "runtime.hpp"
+#include "runtime_services.hpp"
 
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
@@ -497,7 +498,8 @@ bool Initialize(HWND hwnd, ID3D11Device *device,
   return false;
 }
 
-void Render(ID3D11RenderTargetView *rtv) noexcept {
+void Render(const FrameContext& frame) noexcept {
+  ID3D11RenderTargetView* const rtv = frame.render_target;
   if (rtv == nullptr || g_shutting_down.load(std::memory_order_acquire) ||
       g_phase.load(std::memory_order_acquire) != phase::ready ||
       !g_lock_initialized.load(std::memory_order_acquire)) {
@@ -526,7 +528,20 @@ void Render(ID3D11RenderTargetView *rtv) noexcept {
       ImGui::Text("FPS: %.1f", io.Framerate);
       ImGui::Text("Viewport: %.0f x %.0f", viewport->Size.x, viewport->Size.y);
       ImGui::Text("HWND: %p", static_cast<void *>(g_hwnd));
-      ImGui::TextUnformatted("Runtime: active");
+      const auto snapshot = runtime_services::Snapshot();
+      ImGui::SeparatorText("runtime");
+      ImGui::Text("state: %s", runtime_services::StateName(snapshot.state));
+      ImGui::Text("frame: %llu", static_cast<unsigned long long>(snapshot.frame_index));
+      ImGui::Text("frame time: %.3f ms", snapshot.frame_time_ms);
+      ImGui::SeparatorText("host");
+      ImGui::Text("pid: %lu", static_cast<unsigned long>(snapshot.pid));
+      ImGui::Text("hwnd: %s", snapshot.window_valid ? "valid" : "invalid");
+      ImGui::SeparatorText("modules");
+      ImGui::Text("loaded: %zu", snapshot.loaded_module_count);
+      ImGui::Text("invalid PE: %zu", snapshot.invalid_pe_count);
+      if (snapshot.module_error != ERROR_SUCCESS) {
+        ImGui::Text("refresh error: %lu", static_cast<unsigned long>(snapshot.module_error));
+      }
       request_shutdown = ImGui::Button("Unload Module");
       ImGui::End();
     }

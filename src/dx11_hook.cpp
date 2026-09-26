@@ -2,6 +2,7 @@
 
 #include "diagnostics.hpp"
 #include "gui.hpp"
+#include "runtime_services.hpp"
 
 #include <Windows.h>
 #include <d3d11.h>
@@ -12,6 +13,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <cstdio>
 #include <utility>
 
@@ -51,7 +53,10 @@ constinit IDXGISwapChain* g_target_swapchain = nullptr;
 constinit ID3D11Device* g_device = nullptr;
 constinit ID3D11DeviceContext* g_context = nullptr;
 constinit ID3D11RenderTargetView* g_rtv = nullptr;
+constinit HWND g_window = nullptr;
 constinit std::uint32_t g_resize_callbacks = 0;
+std::uint64_t g_frame_index = 0; // guarded by g_graphics_lock
+std::chrono::steady_clock::time_point g_last_frame{};
 
 class exclusive_lock final {
 public:
@@ -303,6 +308,7 @@ bool select_or_match_target(IDXGISwapChain* swapchain,
         g_target_swapchain = swapchain;
         g_device = std::exchange(candidate.device, nullptr);
         g_context = std::exchange(candidate.context, nullptr);
+        g_window = candidate.desc.OutputWindow;
     }
     return g_target_swapchain == swapchain;
 }
@@ -433,21 +439,19 @@ HRESULT STDMETHODCALLTYPE hooked_present(IDXGISwapChain* swapchain,
                     create_rtv_locked(swapchain)) {
                     log_first_present();
 
-                    if (!gui::IsInitialized()) {
-                        DXGI_SWAP_CHAIN_DESC desc{};
-                        DWORD process_id = 0;
-                        if (SUCCEEDED(swapchain->GetDesc(&desc)) &&
-                            desc.OutputWindow != nullptr &&
-                            IsWindow(desc.OutputWindow) &&
-                            GetWindowThreadProcessId(desc.OutputWindow,
-                                                     &process_id) != 0 &&
-                            process_id == GetCurrentProcessId()) {
-                            (void)gui::Initialize(desc.OutputWindow, g_device, g_context);
-                        }
+                    const auto now = std::chrono::steady_clock::now();
+                    const auto delta = g_frame_index == 0
+                        ? std::chrono::steady_clock::duration::zero()
+                        : now - g_last_frame;
+                    g_last_frame = now;
+                    const FrameContext frame{swapchain, g_device, g_context, g_rtv,
+                                             g_window, ++g_frame_index, delta};
+                    runtime_services::Tick(frame);
+                    if (!gui::IsInitialized() && g_window != nullptr && IsWindow(g_window)) {
+                        (void)gui::Initialize(g_window, g_device, g_context);
                     }
-
                     if (gui::IsInitialized()) {
-                        gui::Render(g_rtv);
+                        gui::Render(frame);
                     }
                 }
             }
@@ -593,6 +597,7 @@ void release_graphics_state() noexcept
     release_com(g_context);
     release_com(g_device);
     g_target_swapchain = nullptr;
+    g_window = nullptr;
     g_resize_callbacks = 0;
 }
 

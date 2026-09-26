@@ -10,4 +10,4 @@ cmake --build build/x64 --config Release --parallel
 
 saída: `build/x64/Release/izanagi.dll`. para debug, trocar `Release` por `Debug`.
 
-link: `d3d11.lib`, `dxgi.lib`, `d3dcompiler.lib`, `user32.lib`, `kernel32.lib`, `gdi32.lib`, `dwmapi.lib`.
+link: `d3d11.lib`, `dxgi.lib`, `d3dcompiler.lib`, `user32.lib`, `kernel32.lib`, `gdi32.lib`, `dwmapi.lib`, `psapi.lib`.
