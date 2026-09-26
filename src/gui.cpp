@@ -3,6 +3,8 @@
 #include "diagnostics.hpp"
 #include "runtime.hpp"
 #include "runtime_services.hpp"
+#include "entities/entity_service.hpp"
+#include "entities/field_reader.hpp"
 
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
@@ -12,7 +14,9 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <iostream>
+#include <string>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd,
                                                              UINT message,
@@ -589,6 +593,132 @@ void Render(const FrameContext& frame) noexcept {
             } else {
               ImGui::Text("field status: %u", static_cast<unsigned>(field.status));
             }
+          }
+        }
+      }
+      ImGui::SeparatorText("entities");
+      const auto entity_frame = entities::Snapshot();
+      ImGui::Text("state: %s", entities::StateName(snapshot.entity_state));
+      ImGui::Text("last failure: %s", entities::FailureName(snapshot.entity_failure));
+      ImGui::Text("render tick: %.4f ms", entities::LastTickMs());
+      if (entity_frame) {
+        ImGui::Text("schema generation: %llu  snapshot generation: %llu",
+                    static_cast<unsigned long long>(entity_frame->schema_generation),
+                    static_cast<unsigned long long>(entity_frame->generation));
+        ImGui::Text("highest observed index: %u  valid: %zu  scan: %.3f ms",
+                    entity_frame->highest_observed_index,
+                    entity_frame->entities.size(), entity_frame->scan_ms);
+        ImGui::Text("VirtualQuery: %llu / %.3f ms  cache hits: %llu",
+                    static_cast<unsigned long long>(entity_frame->virtual_queries),
+                    entity_frame->virtual_query_ms,
+                    static_cast<unsigned long long>(entity_frame->query_cache_hits));
+        if (ImGui::CollapsingHeader("entity inspector")) {
+          static entities::EntityHandle selected{};
+          static bool has_selection = false;
+          static char selected_field[128]{};
+          static std::string read_result;
+          ImGui::BeginChild("entity list", ImVec2(0, 180), true);
+          ImGuiListClipper clipper;
+          clipper.Begin(static_cast<int>(entity_frame->entities.size()));
+          while (clipper.Step()) {
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+              const auto& entry = entity_frame->entities[static_cast<std::size_t>(i)].identity;
+              char label[256]{};
+              (void)std::snprintf(label, sizeof(label), "%u:%u  %s##entity%d",
+                                  entry.handle.index, entry.handle.serial,
+                                  entry.class_name.empty() ? "<unresolved>"
+                                                           : entry.class_name.c_str(), i);
+              if (ImGui::Selectable(label, has_selection && entry.handle == selected)) {
+                selected = entry.handle;
+                has_selection = true;
+                read_result.clear();
+              }
+            }
+          }
+          ImGui::EndChild();
+          const entities::EntityIdentity* selected_identity = nullptr;
+          if (has_selection) {
+            for (const auto& entry : entity_frame->entities) {
+              if (entry.identity.handle == selected) {
+                selected_identity = &entry.identity;
+                break;
+              }
+            }
+          }
+          if (selected_identity) {
+            const bool schema_current = selected_identity->schema_valid &&
+                entity_frame->schema_generation == snapshot.schema.generation &&
+                snapshot.schema.generation != 0;
+            ImGui::Text("index: %u  serial: %u", selected.index, selected.serial);
+            ImGui::Text("class: %s  schema: %s",
+                        selected_identity->class_name.empty() ? "<unresolved>"
+                                                              : selected_identity->class_name.c_str(),
+                        schema_current ? "valid" : "unavailable");
+            if (schema_current) {
+              const auto cls = schema::FindClass(selected_identity->scope,
+                                                 selected_identity->class_name);
+              if (cls) {
+                const auto count = (std::min)(cls.value.fields.size(), std::size_t{128});
+                for (std::size_t i = 0; i < count; ++i) {
+                  const auto& field = cls.value.fields[i];
+                  ImGui::Text("%s  %s  +0x%X", field.name.c_str(),
+                              field.type_name.c_str(), field.offset);
+                }
+                if (count < cls.value.fields.size())
+                  ImGui::TextUnformatted("... more fields hidden");
+              }
+            }
+            if (ImGui::InputText("entity field", selected_field,
+                                 sizeof(selected_field))) read_result.clear();
+            if (selected_field[0] != '\0') {
+              const auto field = schema::FindField(selected_identity->scope,
+                                                   selected_identity->class_name,
+                                                   selected_field);
+              if (field) {
+                ImGui::Text("type: %s  offset: 0x%X",
+                            field.value.field.type_name.c_str(),
+                            field.value.effective_offset);
+              } else {
+                ImGui::Text("field status: %u", static_cast<unsigned>(field.status));
+              }
+              if (ImGui::Button("Read field")) {
+                read_result = "unavailable";
+                const auto view = entities::Resolve(selected);
+                if (view && field) {
+                  const auto& name = field.value.field.type_name;
+                  if (entities::detail::TypeMatches(name, entities::ValueType::boolean)) {
+                    const auto value = view->read<bool>(selected_field);
+                    read_result = value ? (value.value ? "true" : "false")
+                                        : entities::detail::FieldStatusName(value.status);
+                  } else if (entities::detail::TypeMatches(name, entities::ValueType::i32)) {
+                    const auto value = view->read<std::int32_t>(selected_field);
+                    read_result = value ? std::to_string(value.value)
+                                        : entities::detail::FieldStatusName(value.status);
+                  } else if (entities::detail::TypeMatches(name, entities::ValueType::u32)) {
+                    const auto value = view->read<std::uint32_t>(selected_field);
+                    read_result = value ? std::to_string(value.value)
+                                        : entities::detail::FieldStatusName(value.status);
+                  } else if (entities::detail::TypeMatches(name, entities::ValueType::f32)) {
+                    const auto value = view->read<float>(selected_field);
+                    read_result = value ? std::to_string(value.value)
+                                        : entities::detail::FieldStatusName(value.status);
+                  } else if (entities::detail::TypeMatches(name, entities::ValueType::pointer)) {
+                    const auto value = view->read<entities::OpaquePointer>(selected_field);
+                    char formatted[32]{};
+                    if (value) (void)std::snprintf(formatted, sizeof(formatted),
+                                                   "0x%llX", static_cast<unsigned long long>(
+                                                       value.value.address));
+                    read_result = value ? formatted
+                                        : entities::detail::FieldStatusName(value.status);
+                  } else {
+                    read_result = "unsupported type";
+                  }
+                }
+              }
+              if (!read_result.empty()) ImGui::Text("value/status: %s", read_result.c_str());
+            }
+          } else if (has_selection) {
+            ImGui::TextUnformatted("selected handle is stale");
           }
         }
       }

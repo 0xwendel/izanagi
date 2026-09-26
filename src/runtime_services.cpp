@@ -34,9 +34,12 @@ bool Initialize() noexcept
         }
         (void)schema::WatchScope("client.dll");
         (void)schema::Initialize();
+        (void)entities::Initialize();
         g_state.store(State::running, std::memory_order_release);
         return true;
     } catch (...) {
+        entities::Shutdown();
+        schema::Shutdown();
         if (g_modules_started) modules::Shutdown();
         g_modules_started = false;
         g_state.store(State::failed, std::memory_order_release);
@@ -48,6 +51,7 @@ void Tick(const FrameContext& frame) noexcept
 {
     if (g_state.load(std::memory_order_acquire) != State::running) return;
     try {
+        entities::Tick(frame);
         const auto module = modules::Snapshot();
         std::lock_guard lock(g_snapshot_lock);
         if (g_state.load(std::memory_order_acquire) != State::running) return;
@@ -61,6 +65,8 @@ void Tick(const FrameContext& frame) noexcept
         g_snapshot.module_error = module.last_error;
         g_snapshot.module_generation = module.generation;
         g_snapshot.schema = schema::Snapshot();
+        g_snapshot.entity_state = entities::CurrentState();
+        g_snapshot.entity_failure = entities::LastFailure();
     } catch (...) {
         report_error("runtime_services::Tick", ERROR_UNHANDLED_EXCEPTION);
     }
@@ -72,12 +78,16 @@ void RefreshModules() noexcept
         if (!modules::Refresh())
             report_error("modules::Refresh", modules::Snapshot().last_error);
         schema::OnModulesUpdated();
+        entities::OnModulesUpdated();
     }
 }
 
 void PollServices() noexcept
 {
-    if (g_state.load(std::memory_order_acquire) == State::running) schema::Poll();
+    if (g_state.load(std::memory_order_acquire) == State::running) {
+        schema::Poll();
+        entities::Poll();
+    }
 }
 
 void BeginShutdown() noexcept
@@ -85,6 +95,7 @@ void BeginShutdown() noexcept
     State expected = State::running;
     (void)g_state.compare_exchange_strong(expected, State::shutting_down,
                                           std::memory_order_acq_rel);
+    entities::BeginShutdown();
     schema::BeginShutdown();
 }
 
@@ -92,6 +103,7 @@ void Shutdown() noexcept
 {
     BeginShutdown();
     // o chamador já deve ter desativado os hooks e drenado os callbacks de present.
+    entities::Shutdown();
     schema::Shutdown();
     if (g_modules_started) {
         modules::Shutdown();

@@ -2,6 +2,7 @@
 
 #include "frame_context.hpp"
 #include "reflection/schema_service.hpp"
+#include "entities/entity_service.hpp"
 #include <Windows.h>
 #include <cstddef>
 #include <cstdint>
@@ -23,6 +24,8 @@ struct SnapshotData {
     DWORD module_error{};
     std::uint64_t module_generation{};
     schema::SnapshotData schema{};
+    entities::State entity_state{entities::State::uninitialized};
+    entities::Failure entity_failure{entities::Failure::none};
 };
 
 bool Initialize() noexcept;

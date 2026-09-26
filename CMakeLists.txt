@@ -55,6 +55,10 @@ add_library(izanagi SHARED
     src/reflection/schema_registry.cpp
     src/reflection/schema_service.cpp
     src/source2/abi/schema_abi.cpp
+    src/entities/safe_read.cpp
+    src/entities/entity_system_adapter.cpp
+    src/entities/field_reader.cpp
+    src/entities/entity_service.cpp
     src/dx11_hook.cpp
     src/gui.cpp
     third_party/imgui/imgui.cpp
@@ -125,4 +129,15 @@ if(BUILD_TESTING)
     target_compile_features(izanagi_schema_tests PRIVATE cxx_std_20)
     target_compile_options(izanagi_schema_tests PRIVATE /W4 /WX /permissive- /EHsc)
     add_test(NAME schema_registry COMMAND izanagi_schema_tests)
+    add_executable(izanagi_entity_tests
+        tests/entity_field_tests.cpp
+        src/entities/field_reader.cpp
+        src/entities/safe_read.cpp
+        src/reflection/schema_registry.cpp
+    )
+    target_include_directories(izanagi_entity_tests PRIVATE src)
+    target_compile_features(izanagi_entity_tests PRIVATE cxx_std_20)
+    target_compile_options(izanagi_entity_tests PRIVATE /W4 /WX /permissive- /EHsc)
+    target_compile_definitions(izanagi_entity_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    add_test(NAME entity_fields COMMAND izanagi_entity_tests)
 endif()
