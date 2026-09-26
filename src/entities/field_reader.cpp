@@ -46,6 +46,7 @@ std::size_t type_size(ValueType type) noexcept
     case ValueType::i32: case ValueType::u32: case ValueType::f32: return 4;
     case ValueType::i64: case ValueType::u64: case ValueType::f64: return 8;
     case ValueType::pointer: return sizeof(std::uintptr_t);
+    case ValueType::bytes: return 0;
     }
     return 0;
 }
@@ -67,6 +68,7 @@ bool TypeMatches(std::string_view name, ValueType type) noexcept
     case ValueType::f32: return equals(name, {"float32", "float"});
     case ValueType::f64: return equals(name, {"float64", "double"});
     case ValueType::pointer: return !name.empty() && name.back() == '*';
+    case ValueType::bytes: return false;
     }
     return false;
 }
@@ -104,6 +106,20 @@ FieldStatus ReadField(const schema::Registry& registry,
         }
         return FieldStatus::found;
     } catch (...) { return FieldStatus::read_failed; }
+}
+
+FieldStatus ReadBoundMemory(std::uintptr_t object, const FieldBinding& binding,
+                            void* target, std::size_t size) noexcept
+{
+    if (!target || size == 0 || size != binding.value_size ||
+        binding.effective_offset > binding.class_size ||
+        size > binding.class_size - binding.effective_offset)
+        return FieldStatus::invalid_address;
+    std::uintptr_t address{};
+    if (!AddAddress(object, binding.effective_offset, address))
+        return FieldStatus::invalid_address;
+    return ReadMemory(address, target, size) ? FieldStatus::found
+                                              : FieldStatus::read_failed;
 }
 
 const char* FieldStatusName(FieldStatus status) noexcept

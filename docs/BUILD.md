@@ -16,3 +16,7 @@ link: `d3d11.lib`, `dxgi.lib`, `d3dcompiler.lib`, `user32.lib`, `kernel32.lib`, 
 o milestone 5 adiciona `izanagi_schema_tests` no CMake. a lista de fontes da DLL
 inclui `src/reflection/*.cpp` e `src/source2/abi/schema_abi.cpp`; não há flags
 MSVC ou bibliotecas novas. detalhes do perfil ABI em `MILESTONE5.md`.
+
+o milestone 7 adiciona `izanagi_spatial_tests` e `src/spatial/`.
+o adapter de transform está em `src/source2/abi/spatial.cpp`.
+o estado da câmera e seus limites estão em `MILESTONE7.md`.

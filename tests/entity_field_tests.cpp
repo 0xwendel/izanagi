@@ -77,5 +77,19 @@ int main()
                 "base_value", (std::numeric_limits<std::uintptr_t>::max)() - 4,
                 entities::ValueType::i32, &number, sizeof(number)) ==
                 entities::FieldStatus::invalid_address, "address overflow");
+    const std::array<float, 3> position{1.0f, 2.0f, 3.0f};
+    std::memcpy(object.data() + 88, position.data(), sizeof(position));
+    entities::FieldBinding binding{1, 88, 128, sizeof(position),
+                                   entities::ValueType::bytes, "CGameSceneNode"};
+    std::array<float, 3> copied{};
+    ok &= check(entities::detail::ReadBoundMemory(
+                    reinterpret_cast<std::uintptr_t>(object.data()), binding,
+                    copied.data(), sizeof(copied)) == entities::FieldStatus::found &&
+                copied == position, "bound vector read");
+    binding.effective_offset = 124;
+    ok &= check(entities::detail::ReadBoundMemory(
+                    reinterpret_cast<std::uintptr_t>(object.data()), binding,
+                    copied.data(), sizeof(copied)) ==
+                entities::FieldStatus::invalid_address, "bound vector bounds");
     return ok ? 0 : 1;
 }

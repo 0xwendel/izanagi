@@ -62,11 +62,20 @@ enum class FieldStatus : std::uint8_t {
 };
 
 enum class ValueType : std::uint8_t {
-    boolean, i8, u8, i16, u16, i32, u32, i64, u64, f32, f64, pointer
+    boolean, i8, u8, i16, u16, i32, u32, i64, u64, f32, f64, pointer, bytes
 };
 
 struct OpaquePointer {
     std::uintptr_t address{};
+};
+
+struct FieldBinding {
+    std::uint64_t schema_generation{};
+    std::uint32_t effective_offset{};
+    std::uint32_t class_size{};
+    std::uint32_t value_size{};
+    ValueType type{};
+    std::string class_name;
 };
 
 template <typename T>

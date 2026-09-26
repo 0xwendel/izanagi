@@ -3,6 +3,7 @@
 #include "frame_context.hpp"
 #include "reflection/schema_service.hpp"
 #include "entities/entity_service.hpp"
+#include "spatial/spatial_service.hpp"
 #include <Windows.h>
 #include <cstddef>
 #include <cstdint>
@@ -26,6 +27,8 @@ struct SnapshotData {
     schema::SnapshotData schema{};
     entities::State entity_state{entities::State::uninitialized};
     entities::Failure entity_failure{entities::Failure::none};
+    spatial::ServiceState spatial_state{spatial::ServiceState::uninitialized};
+    spatial::ServiceState camera_state{spatial::ServiceState::uninitialized};
 };
 
 bool Initialize() noexcept;

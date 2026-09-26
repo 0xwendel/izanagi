@@ -53,6 +53,8 @@ constinit IDXGISwapChain* g_target_swapchain = nullptr;
 constinit ID3D11Device* g_device = nullptr;
 constinit ID3D11DeviceContext* g_context = nullptr;
 constinit ID3D11RenderTargetView* g_rtv = nullptr;
+std::uint32_t g_backbuffer_width = 0;
+std::uint32_t g_backbuffer_height = 0;
 constinit HWND g_window = nullptr;
 constinit std::uint32_t g_resize_callbacks = 0;
 std::uint64_t g_frame_index = 0; // protegido por g_graphics_lock
@@ -334,6 +336,8 @@ bool create_rtv_locked(IDXGISwapChain* swapchain) noexcept
         return false;
     }
 
+    D3D11_TEXTURE2D_DESC backbuffer_desc{};
+    backbuffer->GetDesc(&backbuffer_desc);
     const HRESULT create_result =
         g_device->CreateRenderTargetView(backbuffer, nullptr, &g_rtv);
     release_com(backbuffer);
@@ -346,6 +350,8 @@ bool create_rtv_locked(IDXGISwapChain* swapchain) noexcept
         release_com(g_rtv);
         return false;
     }
+    g_backbuffer_width = backbuffer_desc.Width;
+    g_backbuffer_height = backbuffer_desc.Height;
     return true;
 }
 
@@ -359,6 +365,8 @@ void log_first_present() noexcept
 
 void release_bound_rtv_locked() noexcept
 {
+    g_backbuffer_width = 0;
+    g_backbuffer_height = 0;
     if (g_rtv == nullptr || g_context == nullptr) {
         release_com(g_rtv);
         return;
@@ -445,7 +453,8 @@ HRESULT STDMETHODCALLTYPE hooked_present(IDXGISwapChain* swapchain,
                         : now - g_last_frame;
                     g_last_frame = now;
                     const FrameContext frame{swapchain, g_device, g_context, g_rtv,
-                                             g_window, ++g_frame_index, delta};
+                                             g_window, g_backbuffer_width,
+                                             g_backbuffer_height, ++g_frame_index, delta};
                     runtime_services::Tick(frame);
                     if (!gui::IsInitialized() && g_window != nullptr && IsWindow(g_window)) {
                         (void)gui::Initialize(g_window, g_device, g_context);

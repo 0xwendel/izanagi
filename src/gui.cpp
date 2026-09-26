@@ -5,6 +5,7 @@
 #include "runtime_services.hpp"
 #include "entities/entity_service.hpp"
 #include "entities/field_reader.hpp"
+#include "spatial/spatial_service.hpp"
 
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
@@ -598,9 +599,29 @@ void Render(const FrameContext& frame) noexcept {
       }
       ImGui::SeparatorText("entities");
       const auto entity_frame = entities::Snapshot();
+      const auto spatial_frame = spatial::Snapshot();
       ImGui::Text("state: %s", entities::StateName(snapshot.entity_state));
       ImGui::Text("last failure: %s", entities::FailureName(snapshot.entity_failure));
       ImGui::Text("render tick: %.4f ms", entities::LastTickMs());
+      ImGui::SeparatorText("spatial service");
+      ImGui::Text("state: %s  camera: %s",
+                  spatial::ServiceStateName(snapshot.spatial_state),
+                  spatial::ServiceStateName(snapshot.camera_state));
+      if (spatial_frame) {
+        ImGui::Text("frame: %llu  camera frame: %llu",
+                    static_cast<unsigned long long>(spatial_frame->frame_index),
+                    static_cast<unsigned long long>(spatial_frame->camera.frame_index));
+        ImGui::Text("camera matrix: %s  viewport: %u x %u",
+                    spatial_frame->camera.valid ? "valid" : "unavailable",
+                    spatial_frame->camera.viewport_width,
+                    spatial_frame->camera.viewport_height);
+        ImGui::Text("processed: %zu  transforms: %zu  projected: %zu",
+                    spatial_frame->entities.size(), spatial_frame->valid_transforms,
+                    spatial_frame->projected);
+        ImGui::Text("offscreen: %zu  behind camera: %zu  tick: %.3f ms",
+                    spatial_frame->offscreen, spatial_frame->behind_camera,
+                    spatial_frame->tick_ms);
+      }
       if (entity_frame) {
         ImGui::Text("schema generation: %llu  snapshot generation: %llu",
                     static_cast<unsigned long long>(entity_frame->schema_generation),
@@ -654,6 +675,27 @@ void Render(const FrameContext& frame) noexcept {
                         selected_identity->class_name.empty() ? "<unresolved>"
                                                               : selected_identity->class_name.c_str(),
                         schema_current ? "valid" : "unavailable");
+            if (spatial_frame) {
+              const spatial::SpatialEntitySnapshot* spatial_entry = nullptr;
+              for (const auto& item : spatial_frame->entities) {
+                if (item.handle == selected) { spatial_entry = &item; break; }
+              }
+              if (spatial_entry) {
+                ImGui::Text("spatial: %s",
+                            spatial::StatusName(spatial_entry->transform_status));
+                if (spatial_entry->transform_status == spatial::Status::success) {
+                  const auto& p = spatial_entry->transform.position;
+                  ImGui::Text("world: %.3f  %.3f  %.3f", p.x, p.y, p.z);
+                  ImGui::Text("projection: %s",
+                              spatial::ProjectionStatusName(spatial_entry->projection.status));
+                  if (spatial_entry->projection.status == spatial::ProjectionStatus::visible ||
+                      spatial_entry->projection.status == spatial::ProjectionStatus::outside_viewport)
+                    ImGui::Text("screen: %.3f  %.3f",
+                                spatial_entry->projection.screen.x,
+                                spatial_entry->projection.screen.y);
+                }
+              }
+            }
             if (schema_current) {
               const auto cls = schema::FindClass(selected_identity->scope,
                                                  selected_identity->class_name);

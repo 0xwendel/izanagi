@@ -256,6 +256,35 @@ FieldStatus ReadField(EntityHandle handle, std::string_view expected_class,
     } catch (...) { return FieldStatus::read_failed; }
 }
 
+FieldStatus ReadBoundField(EntityHandle handle, std::string_view expected_class,
+                           std::uint64_t schema_generation, const FieldBinding& binding,
+                           void* target, std::size_t size) noexcept
+{
+    if (!running()) return FieldStatus::unavailable;
+    std::lock_guard lock(g_lock);
+    if (!running() || !g_adapter) return FieldStatus::unavailable;
+    try {
+        const auto registry = schema::RegistrySnapshot();
+        if (!registry || registry->generation() != schema_generation ||
+            binding.schema_generation != schema_generation)
+            return FieldStatus::schema_unavailable;
+        detail::LiveIdentity live;
+        if (!g_adapter->Resolve(handle, live) || live.class_name != expected_class)
+            return FieldStatus::entity_invalid;
+        if (binding.class_name != live.class_name)
+            return FieldStatus::type_mismatch;
+        const auto status = detail::ReadBoundMemory(live.object, binding, target, size);
+        if (status != FieldStatus::found) return status;
+        detail::LiveIdentity after;
+        if (!g_adapter->Resolve(handle, after) || after.object != live.object ||
+            after.class_name != live.class_name) {
+            if (target) std::memset(target, 0, size);
+            return FieldStatus::entity_invalid;
+        }
+        return FieldStatus::found;
+    } catch (...) { return FieldStatus::read_failed; }
+}
+
 bool IsA(EntityHandle handle, std::string_view expected_class,
          std::uint64_t schema_generation, std::string_view base_class) noexcept
 {

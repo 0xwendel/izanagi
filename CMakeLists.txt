@@ -59,6 +59,10 @@ add_library(izanagi SHARED
     src/entities/entity_system_adapter.cpp
     src/entities/field_reader.cpp
     src/entities/entity_service.cpp
+    src/source2/abi/spatial.cpp
+    src/spatial/camera_service.cpp
+    src/spatial/projection.cpp
+    src/spatial/spatial_service.cpp
     src/dx11_hook.cpp
     src/gui.cpp
     third_party/imgui/imgui.cpp
@@ -140,4 +144,12 @@ if(BUILD_TESTING)
     target_compile_options(izanagi_entity_tests PRIVATE /W4 /WX /permissive- /EHsc)
     target_compile_definitions(izanagi_entity_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     add_test(NAME entity_fields COMMAND izanagi_entity_tests)
+    add_executable(izanagi_spatial_tests
+        tests/spatial_tests.cpp
+        src/spatial/projection.cpp
+    )
+    target_include_directories(izanagi_spatial_tests PRIVATE src)
+    target_compile_features(izanagi_spatial_tests PRIVATE cxx_std_20)
+    target_compile_options(izanagi_spatial_tests PRIVATE /W4 /WX /permissive- /EHsc)
+    add_test(NAME spatial_math COMMAND izanagi_spatial_tests)
 endif()

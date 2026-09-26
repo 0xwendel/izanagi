@@ -2,6 +2,7 @@
 
 #include "diagnostics.hpp"
 #include "module_registry.hpp"
+#include "spatial/camera_service.hpp"
 #include <atomic>
 #include <chrono>
 #include <mutex>
@@ -35,9 +36,13 @@ bool Initialize() noexcept
         (void)schema::WatchScope("client.dll");
         (void)schema::Initialize();
         (void)entities::Initialize();
+        (void)spatial::camera::Initialize();
+        (void)spatial::Initialize();
         g_state.store(State::running, std::memory_order_release);
         return true;
     } catch (...) {
+        spatial::Shutdown();
+        spatial::camera::Shutdown();
         entities::Shutdown();
         schema::Shutdown();
         if (g_modules_started) modules::Shutdown();
@@ -52,6 +57,7 @@ void Tick(const FrameContext& frame) noexcept
     if (g_state.load(std::memory_order_acquire) != State::running) return;
     try {
         entities::Tick(frame);
+        spatial::camera::Tick(frame);
         const auto module = modules::Snapshot();
         std::lock_guard lock(g_snapshot_lock);
         if (g_state.load(std::memory_order_acquire) != State::running) return;
@@ -67,6 +73,8 @@ void Tick(const FrameContext& frame) noexcept
         g_snapshot.schema = schema::Snapshot();
         g_snapshot.entity_state = entities::CurrentState();
         g_snapshot.entity_failure = entities::LastFailure();
+        g_snapshot.spatial_state = spatial::CurrentState();
+        g_snapshot.camera_state = spatial::camera::CurrentState();
     } catch (...) {
         report_error("runtime_services::Tick", ERROR_UNHANDLED_EXCEPTION);
     }
@@ -87,6 +95,7 @@ void PollServices() noexcept
     if (g_state.load(std::memory_order_acquire) == State::running) {
         schema::Poll();
         entities::Poll();
+        spatial::Poll();
     }
 }
 
@@ -95,6 +104,8 @@ void BeginShutdown() noexcept
     State expected = State::running;
     (void)g_state.compare_exchange_strong(expected, State::shutting_down,
                                           std::memory_order_acq_rel);
+    spatial::BeginShutdown();
+    spatial::camera::BeginShutdown();
     entities::BeginShutdown();
     schema::BeginShutdown();
 }
@@ -103,6 +114,8 @@ void Shutdown() noexcept
 {
     BeginShutdown();
     // o chamador já deve ter desativado os hooks e drenado os callbacks de present.
+    spatial::Shutdown();
+    spatial::camera::Shutdown();
     entities::Shutdown();
     schema::Shutdown();
     if (g_modules_started) {

@@ -15,6 +15,8 @@ struct FrameContext {
     ID3D11DeviceContext* context{};
     ID3D11RenderTargetView* render_target{};
     HWND window{};
+    std::uint32_t backbuffer_width{};
+    std::uint32_t backbuffer_height{};
     std::uint64_t frame_index{};
     std::chrono::steady_clock::duration delta_time{};
 };

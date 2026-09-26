@@ -11,6 +11,9 @@ namespace izanagi::entities {
 FieldStatus ReadField(EntityHandle handle, std::string_view expected_class,
                       std::uint64_t schema_generation, std::string_view field_name,
                       ValueType type, void* target, std::size_t size) noexcept;
+FieldStatus ReadBoundField(EntityHandle handle, std::string_view expected_class,
+                           std::uint64_t schema_generation, const FieldBinding& binding,
+                           void* target, std::size_t size) noexcept;
 bool IsA(EntityHandle handle, std::string_view expected_class,
          std::uint64_t schema_generation, std::string_view base_class) noexcept;
 
@@ -34,6 +37,19 @@ public:
         result.status = ReadField(handle_, class_name_, schema_generation_,
                                   field_name, ValueTypeOf<T>::value,
                                   &result.value, sizeof(T));
+        return result;
+    }
+
+    template <ReadableValue T>
+    FieldResult<T> read_bound(const FieldBinding& binding) const noexcept
+    {
+        FieldResult<T> result;
+        if (binding.type != ValueTypeOf<T>::value) {
+            result.status = FieldStatus::type_mismatch;
+            return result;
+        }
+        result.status = ReadBoundField(handle_, class_name_, schema_generation_,
+                                        binding, &result.value, sizeof(T));
         return result;
     }
 
