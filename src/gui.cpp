@@ -9,6 +9,7 @@
 #include "imgui_impl_win32.h"
 
 #include <array>
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <iostream>
@@ -542,6 +543,55 @@ void Render(const FrameContext& frame) noexcept {
       if (snapshot.module_error != ERROR_SUCCESS) {
         ImGui::Text("refresh error: %lu", static_cast<unsigned long>(snapshot.module_error));
       }
+      ImGui::SeparatorText("schema");
+      ImGui::Text("state: %s", schema::StateName(snapshot.schema.state));
+      ImGui::TextUnformatted("interface: SchemaSystem_001");
+      ImGui::Text("generation: %llu", static_cast<unsigned long long>(snapshot.schema.generation));
+      ImGui::Text("scopes: %zu  classes: %zu  fields: %zu",
+                  snapshot.schema.scopes, snapshot.schema.classes, snapshot.schema.fields);
+      ImGui::Text("last refresh: %s", snapshot.schema.last_refresh_ok ? "success" : "unavailable/failed");
+      ImGui::Text("last failure: %s", schema::FailureName(snapshot.schema.last_failure));
+      ImGui::Text("inherited field check: %s", snapshot.schema.inheritance_probe_ok ? "passed" : "pending/failed");
+      if (ImGui::Button("Refresh Schema")) schema::RequestRefresh();
+
+      if (ImGui::CollapsingHeader("schema inspector")) {
+        static char scope_name[128] = "client.dll";
+        static char class_name[128]{};
+        static char field_name[128]{};
+        ImGui::InputText("scope", scope_name, sizeof(scope_name));
+        ImGui::InputText("class", class_name, sizeof(class_name));
+        ImGui::InputText("field", field_name, sizeof(field_name));
+        if (class_name[0] != '\0') {
+          const auto cls = schema::FindClass(scope_name, class_name);
+          if (cls) {
+            ImGui::Text("size: 0x%X", cls.value.size);
+            for (const auto& base : cls.value.bases)
+              ImGui::Text("base: %s::%s +0x%X", base.scope.c_str(),
+                          base.name.c_str(), base.offset);
+            const auto count = (std::min)(cls.value.fields.size(), std::size_t{64});
+            for (std::size_t i = 0; i < count; ++i) {
+              const auto& f = cls.value.fields[i];
+              ImGui::Text("%s  %s  +0x%X", f.name.c_str(),
+                          f.type_name.c_str(), f.offset);
+            }
+            if (cls.value.fields.size() > count) ImGui::TextUnformatted("... more fields hidden");
+          } else {
+            ImGui::Text("class status: %u", static_cast<unsigned>(cls.status));
+          }
+          if (field_name[0] != '\0') {
+            const auto field = schema::FindField(scope_name, class_name, field_name);
+            if (field) {
+              ImGui::Text("resolved: %s::%s +0x%X (%s)",
+                          field.value.declaring_scope.c_str(),
+                          field.value.declaring_class.c_str(),
+                          field.value.effective_offset,
+                          field.value.field.type_name.c_str());
+            } else {
+              ImGui::Text("field status: %u", static_cast<unsigned>(field.status));
+            }
+          }
+        }
+      }
       request_shutdown = ImGui::Button("Unload Module");
       ImGui::End();
     }
@@ -589,7 +639,7 @@ bool DetachWndProcAndDrain() noexcept {
     return false;
   }
 
-  // sincroniza com a thread da janela antes de callbacks.
+  // garante que a thread da janela observe a wndproc restaurada antes da espera pelos callbacks.
   if (needs_barrier && !synchronize_window_thread(hwnd)) {
     return false;
   }

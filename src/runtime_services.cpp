@@ -27,11 +27,13 @@ bool Initialize() noexcept
             g_snapshot.state = State::initializing;
             g_snapshot.pid = GetCurrentProcessId();
         }
-        // The registry is secondary. Enumeration failure degrades telemetry only.
+        // falha na enumeração de módulos degrada apenas a telemetria.
         g_modules_started = modules::Initialize();
         if (g_modules_started && !modules::Refresh()) {
             report_error("modules::Refresh(initial)", modules::Snapshot().last_error);
         }
+        (void)schema::WatchScope("client.dll");
+        (void)schema::Initialize();
         g_state.store(State::running, std::memory_order_release);
         return true;
     } catch (...) {
@@ -58,6 +60,7 @@ void Tick(const FrameContext& frame) noexcept
         g_snapshot.invalid_pe_count = module.invalid_pe_count;
         g_snapshot.module_error = module.last_error;
         g_snapshot.module_generation = module.generation;
+        g_snapshot.schema = schema::Snapshot();
     } catch (...) {
         report_error("runtime_services::Tick", ERROR_UNHANDLED_EXCEPTION);
     }
@@ -65,10 +68,16 @@ void Tick(const FrameContext& frame) noexcept
 
 void RefreshModules() noexcept
 {
-    if (g_state.load(std::memory_order_acquire) == State::running &&
-        g_modules_started && !modules::Refresh()) {
-        report_error("modules::Refresh", modules::Snapshot().last_error);
+    if (g_state.load(std::memory_order_acquire) == State::running && g_modules_started) {
+        if (!modules::Refresh())
+            report_error("modules::Refresh", modules::Snapshot().last_error);
+        schema::OnModulesUpdated();
     }
+}
+
+void PollServices() noexcept
+{
+    if (g_state.load(std::memory_order_acquire) == State::running) schema::Poll();
 }
 
 void BeginShutdown() noexcept
@@ -76,12 +85,14 @@ void BeginShutdown() noexcept
     State expected = State::running;
     (void)g_state.compare_exchange_strong(expected, State::shutting_down,
                                           std::memory_order_acq_rel);
+    schema::BeginShutdown();
 }
 
 void Shutdown() noexcept
 {
     BeginShutdown();
-    // The caller must have disabled hooks and drained all Present callbacks.
+    // o chamador já deve ter desativado os hooks e drenado os callbacks de present.
+    schema::Shutdown();
     if (g_modules_started) {
         modules::Shutdown();
         g_modules_started = false;

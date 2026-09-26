@@ -1,6 +1,7 @@
 #pragma once
 
 #include "frame_context.hpp"
+#include "reflection/schema_service.hpp"
 #include <Windows.h>
 #include <cstddef>
 #include <cstdint>
@@ -21,13 +22,15 @@ struct SnapshotData {
     std::size_t invalid_pe_count{};
     DWORD module_error{};
     std::uint64_t module_generation{};
+    schema::SnapshotData schema{};
 };
 
 bool Initialize() noexcept;
 void Tick(const FrameContext& frame) noexcept;
-void RefreshModules() noexcept; // WorkerThread only, outside Present
+void RefreshModules() noexcept; // somente na thread de trabalho, fora de present
+void PollServices() noexcept; // somente na thread de trabalho
 void BeginShutdown() noexcept;
-void Shutdown() noexcept; // after DXGI callback drain
+void Shutdown() noexcept; // após drenar os callbacks dxgi
 SnapshotData Snapshot() noexcept;
 const char* StateName(State state) noexcept;
 

@@ -48,14 +48,14 @@ constinit bool g_present_enabled = false;
 constinit bool g_resize_buffers_enabled = false;
 constinit bool g_unsafe_to_unload = false;
 
-// identidade sem addref; reutilização do endereço pode confundir a seleção.
+// identidade sem addref; o endereço pode ser reutilizado por outra swapchain.
 constinit IDXGISwapChain* g_target_swapchain = nullptr;
 constinit ID3D11Device* g_device = nullptr;
 constinit ID3D11DeviceContext* g_context = nullptr;
 constinit ID3D11RenderTargetView* g_rtv = nullptr;
 constinit HWND g_window = nullptr;
 constinit std::uint32_t g_resize_callbacks = 0;
-std::uint64_t g_frame_index = 0; // guarded by g_graphics_lock
+std::uint64_t g_frame_index = 0; // protegido por g_graphics_lock
 std::chrono::steady_clock::time_point g_last_frame{};
 
 class exclusive_lock final {
@@ -129,7 +129,7 @@ public:
 
         WNDCLASSEXW window_class{};
         window_class.cbSize = sizeof(window_class);
-        // mantém a wndproc temporária fora da dll caso o cleanup falhe.
+        // a wndproc temporária fica fora da dll caso a limpeza falhe.
         window_class.lpfnWndProc = &DefWindowProcW;
         window_class.hInstance = instance_;
         window_class.lpszClassName = class_name_;

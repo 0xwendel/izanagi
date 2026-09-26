@@ -10,7 +10,7 @@
 
 namespace izanagi::modules {
 
-// Metadata is a point-in-time copy. handle/base may become stale after Refresh.
+// snapshot pontual; handle e base podem ficar inválidos após o refresh.
 struct ModuleInfo {
     std::wstring name;
     HMODULE handle{};

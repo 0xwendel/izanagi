@@ -51,6 +51,10 @@ add_library(izanagi SHARED
     src/runtime_services.cpp
     src/module_registry.cpp
     src/pe_image.cpp
+    src/reflection/interface_resolver.cpp
+    src/reflection/schema_registry.cpp
+    src/reflection/schema_service.cpp
+    src/source2/abi/schema_abi.cpp
     src/dx11_hook.cpp
     src/gui.cpp
     third_party/imgui/imgui.cpp
@@ -110,3 +114,15 @@ set_target_properties(izanagi PROPERTIES
     CXX_EXTENSIONS OFF
     OUTPUT_NAME "izanagi"
 )
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(izanagi_schema_tests
+        tests/schema_registry_tests.cpp
+        src/reflection/schema_registry.cpp
+    )
+    target_include_directories(izanagi_schema_tests PRIVATE src)
+    target_compile_features(izanagi_schema_tests PRIVATE cxx_std_20)
+    target_compile_options(izanagi_schema_tests PRIVATE /W4 /WX /permissive- /EHsc)
+    add_test(NAME schema_registry COMMAND izanagi_schema_tests)
+endif()

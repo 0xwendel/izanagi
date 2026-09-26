@@ -8,7 +8,7 @@
 
 namespace izanagi {
 
-// Borrowed for one Present callback. Never retain this object or its COM pointers.
+// o contexto e seus ponteiros valem apenas durante uma chamada de present.
 struct FrameContext {
     IDXGISwapChain* swapchain{};
     ID3D11Device* device{};

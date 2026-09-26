@@ -67,11 +67,11 @@ bool enumerate(std::vector<ModuleInfo>& result, SnapshotData& data) noexcept
         }
         data.loaded_count = handles.size();
         for (HMODULE candidate : handles) {
-            // Pin temporarily across GetModuleInformation and PE inspection.
+            // fixa o módulo durante a consulta e a inspeção pe.
             HMODULE pinned = nullptr;
             if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
                                     reinterpret_cast<LPCWSTR>(candidate), &pinned)) {
-                continue; // module unloaded after enumeration
+                continue; // o módulo saiu após a enumeração
             }
             MODULEINFO info{};
             wchar_t name[MAX_PATH]{};
@@ -123,7 +123,7 @@ bool Refresh() noexcept
         g_modules.swap(next);
         g_data = data;
     } else {
-        g_modules.clear(); // stale handles are never retained as current
+        g_modules.clear(); // descarta handles que já não representam o estado atual
         g_data.loaded_count = 0;
         g_data.invalid_pe_count = 0;
         g_data.last_error = data.last_error;

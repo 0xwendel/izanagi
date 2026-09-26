@@ -14,7 +14,7 @@ struct Metadata {
     std::uint16_t sections{};
 };
 
-// Examines a mapped image, not a raw PE file. Reads only committed, readable pages.
+// inspeciona a imagem mapeada, não o arquivo pe bruto.
 std::optional<Metadata> InspectImage(const void* base, std::size_t mapped_size) noexcept;
 
 }

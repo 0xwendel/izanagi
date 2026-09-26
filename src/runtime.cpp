@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <iostream>
 
 namespace izanagi {
@@ -52,15 +53,24 @@ DWORD runtime::Initialize()
         return k_stream_error;
     }
 
+    const auto services_started = std::chrono::steady_clock::now();
     if (!runtime_services::Initialize()) {
         report_error("runtime_services::Initialize", ERROR_GEN_FAILURE);
         return ERROR_GEN_FAILURE;
     }
+    const auto services_ready = std::chrono::steady_clock::now();
     hook_attempted_ = true;
     if (!dx11_hook::Initialize()) {
         report_error("dx11_hook::Initialize", ERROR_GEN_FAILURE);
         return ERROR_GEN_FAILURE;
     }
+    const auto hook_ready = std::chrono::steady_clock::now();
+    const auto millis = [](auto from, auto to) noexcept {
+        return std::chrono::duration<double, std::milli>(to - from).count();
+    };
+    (void)std::fprintf(stdout, "izanagi: startup timing services=%.1f ms hook=%.1f ms\n",
+                       millis(services_started, services_ready),
+                       millis(services_ready, hook_ready));
 
     state_ = lifecycle::active;
     return ERROR_SUCCESS;
@@ -77,6 +87,7 @@ void runtime::Run()
 
     auto next_refresh = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!g_shutdown_requested.load(std::memory_order_acquire)) {
+        runtime_services::PollServices();
         const auto now = std::chrono::steady_clock::now();
         if (now >= next_refresh) {
             runtime_services::RefreshModules();
